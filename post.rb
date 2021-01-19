@@ -68,10 +68,10 @@ class Post
             to_db_hash.keys.join(', ') + #все поля, перечисленные через запятую
             ") " +
             " VALUES ( " +
-            ('?,'*to_db_hash.size).chomp(',') + # строка из заданного числа _плейсхолдеров_ ?,?,?...
+            ('?,' * to_db_hash.size).chomp(',') + # строка из заданного числа _плейсхолдеров_ ?,?,?...
             ")",
         to_db_hash.values #массив значений хэша, которые будут вставлены в запрос вместо _плейсхолдеров_
-        )
+    )
     insert_row_id = db.last_insert_row_id #в переменную запишем id записи и потом вернем ее в этом методе
 
     db.close #закрываем соединение к базе
@@ -89,11 +89,92 @@ class Post
     file.close
   end
 
-    def file_path
-      current_path = File.dirname(__FILE__ )
+  def file_path
+    current_path = File.dirname(__FILE__)
 
-      file_name = @created_at.strftime("#{self.class.name}_%Y-%m-%d_%H-%M-%S.txt")
+    file_name = @created_at.strftime("#{self.class.name}_%Y-%m-%d_%H-%M-%S.txt")
 
-      return current_path + "/" + file_name
+    return current_path + "/" + file_name
+  end
+
+  # Метод load_data заполняет переменные эземпляра из полученного хэша
+  def load_data(data_hash)
+    # Общее для всех детей класса Post поведение описано в методе экземпляра
+    # класса Post.
+    @created_at = Time.parse(data_hash['created_at'])
+    @text = data_hash['text']
+    # Остальные специфичные переменные должны заполнить дочерние классы в своих
+    # версиях класса load_data (вызвав текущий метод с пом. super)
+  end
+
+  def self.find(limit, type, id)
+    db = SQLite3::Database.open(@@SQLITE_DB_FILE) # открываем соединение к базе SQLite
+    if !id.nil?
+      # Если в параметрах передали идентификатор записи, нам надо найти эту
+      # запись по идентификатору.
+      db.results_as_hash = true # настройка соединения к базе, он результаты из базы преобразует в Руби хэши
+      # выполняем наш запрос, он возвращает массив результатов, в нашем случае из одного элемента
+      result = db.execute("SELECT * FROM posts WHERE rowid = ?", id) # по документации метод execute должен вернуть массив
+      result = result[0] if result.is_a? Array #вернем первый элемент массива
+      db.close
+
+      if result == nil
+
+        abort "Такой id #{id} не найден в базе"
+
+      else
+        # Продолжаем ветку выполнения, если был передан id и результат не был пустым
+        # Создаем экземпляр поста
+        # Мы можем узнать тип поста из запроса что получили и положили в массив результатов result
+        # у нас есть статический метод create в классе post. его мы и вызовем передав тип поста
+        post = create(result['type'])
+
+
+        # Теперь, когда мы создали экземпляр нужного класса, заполним его
+        # содержимым, передав методу load_data хэш result.
+        # каждый из детей класса Post сам знает, как ему быть с такими
+        # данными.
+        post.load_data(result)
+
+        #и вернем пост
+
+        return post
+
+      end
+
+      #а эта веть выполняется если id не был передан
+    else
+      # если нам не передали идентификатор поста (вместо него передали nil),
+      # то нам надо найти все посты указанного типа (если в метод передали
+      # переменную type).
+
+      # Но для начала скажем нашему объекту соединения, что результаты не нужно
+      # преобразовывать к хэшу.
+      db.results_as_hash = false
+
+      #формируем запрос с нужными условиями
+      query = "SELECT rowid, * FROM posts "
+
+      query += "WHERE type = :type " unless type.nil? # если задан тип, надо добавить условие
+      query += "ORDER by rowid DESC " # добавим сортировку
+
+      query += "LIMIT :limit " unless limit.nil? #если задан лимит, надо добавить условие
+
+      #подготавливаем запрос в базу
+      statement = db.prepare query
+
+      statement.bind_param('type', type) unless type.nil? #загружаем в запрос тип вместо плейсхолдера
+      statement.bind_param('limit', limit) unless limit.nil? #загружаем лимит вместо плейсхолдера
+
+      # Выполняем запрос и записываем его в переменную result. Там будет массив
+      # с данными из базы.
+      result = statement.execute!
+      # Закрываем запрос
+      statement.close
+      # закрываем бд
+      db.close
+
+      return result
     end
+  end
 end

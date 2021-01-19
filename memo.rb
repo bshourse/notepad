@@ -37,4 +37,10 @@ class Memo < Post
     )
   end
 
+  def load_data(data_hash)
+    super(data_hash) # сперва дергаем родительский метод для общих полей
+    # теперь прописываем свое специфичное поле
+    @text = data_hash['text'].split('\n')
+  end
+
 end
