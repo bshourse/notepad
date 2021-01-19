@@ -24,4 +24,22 @@ class Link < Post
     return [@url, @text, time_string]
   end
 
+  def to_db_hash
+    # вызываем родительский метод ключевым словом super и к хэшу, который он вернул
+    # присоединяем прицепом специфичные для этого класса поля методом Hash#merge
+    return super.merge(
+        {
+            'text' => @text,
+            'url' => @url
+        }
+    )
+  end
+
+  def load_data(data_hash)
+    # загружаем свои поля из хэш массива
+    super # сперва дергаем родительский метод для общих полей
+    # теперь прописываем свое специфичное поле
+    @url = data_hash['url']
+  end
+
 end

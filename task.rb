@@ -28,6 +28,24 @@ class Task < Post
     return [deadline, @text, time_string]
   end
 
+  def to_db_hash
+    # вызываем родительский метод ключевым словом super и к хэшу, который он вернул
+    # присоединяем прицепом специфичные для этого класса поля методом Hash#merge
+    return super.merge(
+        {
+            'text' => @text,
+            'due_date' => @due_date.to_s
+        }
+    )
+  end
+
+  def load_data(data_hash)
+    super(data_hash) # сперва дергаем родительский метод для общих полей
+
+    # теперь прописываем свое специфичное поле
+    @due_date = Date.parse(data_hash['due_date'])
+  end
+
 end
 
 
