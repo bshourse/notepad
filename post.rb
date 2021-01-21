@@ -63,17 +63,22 @@ class Post
     db = SQLite3::Database.open(@@SQLITE_DB_FILE) # открываем "соединение" к базе SQLite
     db.results_as_hash = true # настройка соединения к базе, результаты из базы преобразует в руби хэши
     # запрос к базе на вставку новой записи в соответствии с хэшом, сформированным дочерним классом to_db_hash
-    db.execute(
-        "INSERT INTO posts (" +
-            to_db_hash.keys.join(', ') + #все поля, перечисленные через запятую
-            ") " +
-            " VALUES ( " +
-            ('?,' * to_db_hash.size).chomp(',') + # строка из заданного числа _плейсхолдеров_ ?,?,?...
-            ")",
-        to_db_hash.values #массив значений хэша, которые будут вставлены в запрос вместо _плейсхолдеров_
-    )
-    insert_row_id = db.last_insert_row_id #в переменную запишем id записи и потом вернем ее в этом методе
+    begin
+      db.execute(
+          "INSERT INTO posts (" +
+              to_db_hash.keys.join(', ') + #все поля, перечисленные через запятую
+              ") " +
+              " VALUES ( " +
+              ('?,' * to_db_hash.size).chomp(',') + # строка из заданного числа _плейсхолдеров_ ?,?,?...
+              ")",
+          to_db_hash.values #массив значений хэша, которые будут вставлены в запрос вместо _плейсхолдеров_
+      )
+    rescue SQLite3::SQLException => error
+      puts "Не удалось выполнить запрос в базе: #{@@SQLITE_DB_FILE}"
+      abort error.message
+    end
 
+    insert_row_id = db.last_insert_row_id #в переменную запишем id записи и потом вернем ее в этом методе
     db.close #закрываем соединение к базе
 
     return insert_row_id # возвращаем идентификатор записи в базе
@@ -113,7 +118,14 @@ class Post
     # запись по идентификатору.
     db.results_as_hash = true # настройка соединения к базе, он результаты из базы преобразует в Руби хэши
     # выполняем наш запрос, он возвращает массив результатов, в нашем случае из одного элемента
-    result = db.execute("SELECT * FROM posts WHERE rowid = ?", id) # по документации метод execute должен вернуть массив
+
+    begin
+      result = db.execute("SELECT * FROM posts WHERE rowid = ?", id) # по документации метод execute должен вернуть массив
+    rescue SQLite3::SQLException => error
+      puts "Не удалось выполнить запрос в базе: #{@@SQLITE_DB_FILE}"
+      abort error.message
+    end
+
     result = result[0] if result.is_a? Array #вернем первый элемент массива
     db.close
 
@@ -162,14 +174,26 @@ class Post
     query += "LIMIT :limit " unless limit.nil? #если задан лимит, надо добавить условие
 
     #подготавливаем запрос в базу
-    statement = db.prepare query
+    begin
+      statement = db.prepare query
+    rescue SQLite3::SQLException => error
+      puts "Не удалось выполнить запрос в базе: #{@@SQLITE_DB_FILE}"
+      abort error.message
+    end
 
     statement.bind_param('type', type) unless type.nil? #загружаем в запрос тип вместо плейсхолдера
     statement.bind_param('limit', limit) unless limit.nil? #загружаем лимит вместо плейсхолдера
 
     # Выполняем запрос и записываем его в переменную result. Там будет массив
     # с данными из базы.
-    result = statement.execute!
+
+    begin
+      result = statement.execute!
+    rescue SQLite3::SQLException => error
+      puts "Не удалось выполнить запрос в базе: #{@@SQLITE_DB_FILE}"
+      abort error.message
+    end
+
     # Закрываем запрос
     statement.close
     # закрываем бд
